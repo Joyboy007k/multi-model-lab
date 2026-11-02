@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: multi-model-lab
+    runtime: python
+    plan: free
+    buildCommand: "echo 'no build needed (stdlib only)'"
+    startCommand: "python app.py"
+    healthCheckPath: /health
+    envVars:
+      - key: BRIDGE_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GROK_MODEL
+        value: grok-4.7
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-5-5
+      - key: OPENAI_MODEL
+        value: gpt-6-luna
