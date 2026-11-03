@@ -9,19 +9,15 @@ services:
     envVars:
       - key: BRIDGE_API_KEY
         sync: false
-      - key: XAI_API_KEY
-        sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: ANTHROPIC_API_KEY
+      - key: GROQ_API_KEY
         sync: false
-      - key: OPENAI_API_KEY
+      - key: OPENROUTER_API_KEY
         sync: false
-      - key: GROK_MODEL
-        value: grok-4.7
       - key: GEMINI_MODEL
         value: gemini-2.0-flash
-      - key: CLAUDE_MODEL
-        value: claude-sonnet-5-5
-      - key: OPENAI_MODEL
-        value: gpt-6-luna
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: OPENROUTER_MODEL
+        value: google/gemma-3-27b-it:free
