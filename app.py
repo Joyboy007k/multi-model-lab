@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
 """
-Multi-Model Lab v2 — ask Grok, Gemini, Claude and ChatGPT at once.
+Multi-Model Lab v3 — FREE tier edition.
+Ask Gemini, Groq and OpenRouter (:free models) at once. $0 in API costs.
 
 Endpoints:
-  GET  /        -> web UI (ask once, see all four answers side by side)
+  GET  /        -> web UI (ask once, see all answers side by side)
   GET  /health  -> {"ok": true}
   POST /ask     -> JSON {"question": "...", "mode": "compare"|"debate",
-                         "models": ["grok","gemini","claude","chatgpt"]}
+                         "models": ["gemini","groq","openrouter"]}
                    Header: X-API-Key: <BRIDGE_API_KEY>
                    Returns {"answers": {model: text}, "errors": {model: reason}}
 
 Env vars (never hardcode keys):
   BRIDGE_API_KEY    - password protecting this app itself
-  XAI_API_KEY       - xAI console (console.x.ai) — Grok, paid per token
   GEMINI_API_KEY    - Google AI Studio (aistudio.google.com) — free tier
-  ANTHROPIC_API_KEY - Anthropic console (console.anthropic.com) — Claude, paid
-  OPENAI_API_KEY    - OpenAI platform (platform.openai.com) — ChatGPT, paid
-  GROK_MODEL        - default: grok-4.7
+  GROQ_API_KEY      - Groq console (console.groq.com) — free plan, 1000 req/day
+  OPENROUTER_API_KEY- OpenRouter (openrouter.ai) — :free models, 50 req/day
   GEMINI_MODEL      - default: gemini-2.0-flash
-  CLAUDE_MODEL      - default: claude-sonnet-5-5
-  OPENAI_MODEL      - default: gpt-6-luna
+  GROQ_MODEL        - default: openai/gpt-oss-120b
+  OPENROUTER_MODEL  - default: google/gemma-3-27b-it:free
   PORT              - default: 8000
 
 Stdlib only. Run:  python app.py
@@ -33,14 +32,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BRIDGE_API_KEY = os.environ.get("BRIDGE_API_KEY", "")
-XAI_API_KEY = os.environ.get("XAI_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-GROK_MODEL = os.environ.get("GROK_MODEL", "grok-4.7")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-6-luna")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemma-3-27b-it:free")
 PORT = int(os.environ.get("PORT", "8000"))
 TIMEOUT = 120
 
@@ -56,20 +53,13 @@ def _post(url, payload, headers):
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _chat_openai_compatible(url, api_key, model, question, extra_headers=None):
+def _chat(url, api_key, model, question, extra_headers=None):
     data = _post(
         url,
         {"model": model, "messages": [{"role": "user", "content": question}]},
         {"Authorization": f"Bearer {api_key}", **(extra_headers or {})},
     )
     return data["choices"][0]["message"]["content"].strip()
-
-
-def ask_grok(question):
-    # xAI — OpenAI-compatible endpoint
-    return _chat_openai_compatible(
-        "https://api.x.ai/v1/chat/completions", XAI_API_KEY, GROK_MODEL, question
-    )
 
 
 def ask_gemini(question):
@@ -85,30 +75,26 @@ def ask_gemini(question):
     ).strip()
 
 
-def ask_claude(question):
-    data = _post(
-        "https://api.anthropic.com/v1/messages",
-        {"model": CLAUDE_MODEL, "max_tokens": 2048,
-         "messages": [{"role": "user", "content": question}]},
-        {"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"},
+def ask_groq(question):
+    return _chat(
+        "https://api.groq.com/openai/v1/chat/completions",
+        GROQ_API_KEY, GROQ_MODEL, question,
     )
-    return "".join(
-        b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"
-    ).strip()
 
 
-def ask_chatgpt(question):
-    return _chat_openai_compatible(
-        "https://api.openai.com/v1/chat/completions",
-        OPENAI_API_KEY, OPENAI_MODEL, question,
+def ask_openrouter(question):
+    return _chat(
+        "https://openrouter.ai/api/v1/chat/completions",
+        OPENROUTER_API_KEY, OPENROUTER_MODEL, question,
+        {"HTTP-Referer": "https://multi-model-lab.onrender.com",
+         "X-Title": "Multi-Model Lab"},
     )
 
 
 MODEL_FNS = {
-    "grok": (ask_grok, "XAI_API_KEY"),
     "gemini": (ask_gemini, "GEMINI_API_KEY"),
-    "claude": (ask_claude, "ANTHROPIC_API_KEY"),
-    "chatgpt": (ask_chatgpt, "OPENAI_API_KEY"),
+    "groq": (ask_groq, "GROQ_API_KEY"),
+    "openrouter": (ask_openrouter, "OPENROUTER_API_KEY"),
 }
 ALL_MODELS = list(MODEL_FNS)
 
@@ -166,16 +152,16 @@ textarea{width:100%;height:90px}button{padding:.6rem 1.2rem;margin:.5rem .25rem 
 @media(max-width:700px){.grid{grid-template-columns:1fr}}
 .card{border:1px solid #ccc;border-radius:8px;padding:1rem;white-space:pre-wrap}
 h3{margin:.2rem 0}.err{color:#a00}.models{margin:.5rem 0}
-.models label{margin-right:1rem}</style></head><body>
+.models label{margin-right:1rem}.free{background:#e8f5e9;padding:.5rem;border-radius:6px}</style></head><body>
 <h1>Multi-Model Lab</h1>
-<p>Ask once — Grok, Gemini, Claude and ChatGPT answer together.</p>
+<p class="free">100% free tier: Gemini + Groq + OpenRouter free models. Ask once, compare answers.</p>
 <textarea id="q" placeholder="Type your question..."></textarea><br>
 <div class="models" id="models"></div>
 <label><input type="checkbox" id="debate"> Debate mode (models critique each other)</label><br>
 <button onclick="ask()">Ask all models</button>
 <div id="out"></div>
 <script>
-const MODELS = ['grok','gemini','claude','chatgpt'];
+const MODELS = ['gemini','groq','openrouter'];
 document.getElementById('models').innerHTML = MODELS.map(m =>
   `<label><input type="checkbox" class="m" value="${m}" checked> ${m}</label>`).join('');
 let key = sessionStorage.getItem('mmk') || '';
@@ -259,7 +245,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Multi-Model Lab v2 on port {PORT} | models: {', '.join(ALL_MODELS)}")
+    print(f"Multi-Model Lab v3 (free) on port {PORT} | models: {', '.join(ALL_MODELS)}")
     for name, (_, env) in MODEL_FNS.items():
         if not os.environ.get(env):
             print(f"  [warn] {env} not set - {name} will report 'missing key'")
