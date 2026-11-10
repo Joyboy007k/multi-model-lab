@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Multi-Model Lab v3 — FREE tier edition.
+Multi-Model Lab v3.1 — FREE tier edition + Claude trial slot.
 Ask Gemini, Groq and OpenRouter (:free models) at once. $0 in API costs.
+Claude runs on the small one-time Anthropic starter credit (new Console
+account) — NOT a free tier; it stops answering when the credit runs out.
 
 Endpoints:
   GET  /        -> web UI (ask once, see all answers side by side)
   GET  /health  -> {"ok": true}
   POST /ask     -> JSON {"question": "...", "mode": "compare"|"debate",
-                         "models": ["gemini","groq","openrouter"]}
+                         "models": ["gemini","groq","openrouter","claude"]}
                    Header: X-API-Key: <BRIDGE_API_KEY>
                    Returns {"answers": {model: text}, "errors": {model: reason}}
 
@@ -16,6 +18,9 @@ Env vars (never hardcode keys):
   GEMINI_API_KEY    - Google AI Studio (aistudio.google.com) — free tier
   GROQ_API_KEY      - Groq console (console.groq.com) — free plan, 1000 req/day
   OPENROUTER_API_KEY- OpenRouter (openrouter.ai) — :free models, 50 req/day
+  ANTHROPIC_API_KEY - Claude Console (platform.claude.com) — small one-time
+                      starter credit for new accounts; NOT a free tier
+  CLAUDE_MODEL      - default: claude-sonnet-5-5
   GEMINI_MODEL      - default: gemini-2.0-flash
   GROQ_MODEL        - default: openai/gpt-oss-120b
   OPENROUTER_MODEL  - default: google/gemma-3-27b-it:free
@@ -35,6 +40,8 @@ BRIDGE_API_KEY = os.environ.get("BRIDGE_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-5-5")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemma-3-27b-it:free")
@@ -91,10 +98,29 @@ def ask_openrouter(question):
     )
 
 
+def ask_claude(question):
+    # Anthropic Messages API. Sonnet 5.5 rejects non-default sampling params,
+    # so send no temperature/top_p.
+    if not ANTHROPIC_API_KEY:
+        raise RuntimeError("missing ANTHROPIC_API_KEY on server")
+    data = _post(
+        "https://api.anthropic.com/v1/messages",
+        {"model": CLAUDE_MODEL, "max_tokens": 1024,
+         "messages": [{"role": "user", "content": question}]},
+        {"x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01"},
+    )
+    return "".join(
+        block.get("text", "")
+        for block in data.get("content", [])
+        if block.get("type") == "text"
+    ).strip()
+
+
 MODEL_FNS = {
     "gemini": (ask_gemini, "GEMINI_API_KEY"),
     "groq": (ask_groq, "GROQ_API_KEY"),
     "openrouter": (ask_openrouter, "OPENROUTER_API_KEY"),
+    "claude": (ask_claude, "ANTHROPIC_API_KEY"),
 }
 ALL_MODELS = list(MODEL_FNS)
 
@@ -154,14 +180,14 @@ textarea{width:100%;height:90px}button{padding:.6rem 1.2rem;margin:.5rem .25rem 
 h3{margin:.2rem 0}.err{color:#a00}.models{margin:.5rem 0}
 .models label{margin-right:1rem}.free{background:#e8f5e9;padding:.5rem;border-radius:6px}</style></head><body>
 <h1>Multi-Model Lab</h1>
-<p class="free">100% free tier: Gemini + Groq + OpenRouter free models. Ask once, compare answers.</p>
+<p class="free">Free tier: Gemini + Groq + OpenRouter free models. Claude runs on the small Anthropic starter credit. Ask once, compare answers.</p>
 <textarea id="q" placeholder="Type your question..."></textarea><br>
 <div class="models" id="models"></div>
 <label><input type="checkbox" id="debate"> Debate mode (models critique each other)</label><br>
 <button onclick="ask()">Ask all models</button>
 <div id="out"></div>
 <script>
-const MODELS = ['gemini','groq','openrouter'];
+const MODELS = ['gemini','groq','openrouter','claude'];
 document.getElementById('models').innerHTML = MODELS.map(m =>
   `<label><input type="checkbox" class="m" value="${m}" checked> ${m}</label>`).join('');
 let key = sessionStorage.getItem('mmk') || '';
@@ -245,7 +271,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"Multi-Model Lab v3 (free) on port {PORT} | models: {', '.join(ALL_MODELS)}")
+    print(f"Multi-Model Lab v3.1 (free + Claude trial) on port {PORT} | models: {', '.join(ALL_MODELS)}")
     for name, (_, env) in MODEL_FNS.items():
         if not os.environ.get(env):
             print(f"  [warn] {env} not set - {name} will report 'missing key'")

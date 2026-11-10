@@ -15,6 +15,10 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CLAUDE_MODEL
+        value: claude-sonnet-5-5
       - key: GEMINI_MODEL
         value: gemini-2.0-flash
       - key: GROQ_MODEL
